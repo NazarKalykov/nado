@@ -53,6 +53,9 @@ em{color:var(--pink-dark)}
 .secret-modal:fullscreen img{width:100vw;height:100vh;object-fit:contain}
 .secret-modal-backdrop{position:absolute;inset:0}
 .secret-modal-close{position:absolute;right:22px;top:16px;background:none;color:#fff;font-size:38px;line-height:1;z-index:2;cursor:pointer;text-shadow:0 2px 10px rgba(0,0,0,.8)}
+#fpPanel{position:fixed;right:12px;bottom:12px;z-index:10002;background:#111e;color:#fff;border:1px solid #fff2;border-radius:16px;backdrop-filter:blur(8px);padding:16px 18px;font:12px/1.6 'DM Sans',sans-serif;max-width:340px;max-height:58vh;overflow:auto;box-shadow:0 12px 30px #0006}
+#fpPanel b{color:var(--gold)} #fpPanel small{color:#a99a8c}
+#fpPanel.hidden{display:none}
 </style>
 </head>
 <body>
@@ -113,7 +116,8 @@ em{color:var(--pink-dark)}
 </div>
 <div class="toast" id="toast"></div>
 <div class="article-modal" id="articleModal" aria-hidden="true"><div class="article-modal-backdrop" data-close-modal></div><article class="article-modal-card"><button class="article-modal-close" data-close-modal aria-label="Закрыть">×</button><p class="eyebrow" id="modalCategory"></p><h2 id="modalTitle"></h2><p class="modal-date" id="modalDate"></p><div class="modal-text" id="modalText"></div></article></div>
-<div class="secret-modal" id="secretModal" aria-hidden="true"><div class="secret-modal-backdrop" data-close-secret></div><button class="secret-modal-close" data-close-secret aria-label="Закрыть">×</button><img src="uploads/images (2).jpeg" alt="секрет"></div>
+<div class="secret-modal" id="secretModal" aria-hidden="true"><div class="secret-modal-backdrop" data-close-secret></div><button class="secret-modal-close" data-close-secret aria-label="Закрыть">×</button><img src="uploads/images%20(2).jpeg" alt="секрет"></div>
+<div id="fpPanel" class="hidden"><div id="fpBody">загрузка...</div></div>
 <script>
 const categoryNames = {obsh:'Общество',istorii:'Истории',mnenie:'Мнение'};
 const articles = [
@@ -256,15 +260,104 @@ document.querySelectorAll('[data-close-modal]').forEach(el=>el.addEventListener(
   if(location.hash.startsWith('#article-')) history.replaceState(null,'',location.pathname+location.search);
 }));
 document.addEventListener('keydown',e=>{if(e.key==='Escape') document.querySelector('[data-close-modal]')?.click();});
-function openSecret(){
+let spamTimer=null,spamIdx=1;let spamNotifs=[];
+function parseBrowser(ua){
+  const u=ua.toLowerCase();
+  if(u.includes('edg/')) return 'Edge';
+  if(u.includes('opr/')||u.includes('opera')) return 'Opera';
+  if(u.includes('chrome/')&&!u.includes('edg')&&!u.includes('opr')) return 'Chrome';
+  if(u.includes('firefox/')) return 'Firefox';
+  if(u.includes('safari/')&&!u.includes('chrome')) return 'Safari';
+  if(u.includes('yabrowser')) return 'Yandex';
+  return 'Браузер';
+}
+function parseOS(ua){
+  const u=ua.toLowerCase();
+  if(u.includes('windows nt')) return 'Windows';
+  if(u.includes('android')) return 'Android';
+  if(u.includes('iphone')||u.includes('ipad')) return 'iOS';
+  if(u.includes('mac os')) return 'macOS';
+  if(u.includes('linux')) return 'Linux';
+  return navigator.platform||'—';
+}
+function pushBrowserNotif(){
+  if(!("Notification" in window)){
+    console.warn("Notification API not supported");
+    return;
+  }
+  if(Notification.permission!=="granted"){
+    console.warn("Notification permission:", Notification.permission);
+    return;
+  }
+  const title="тест "+(spamIdx++);
+  try{
+    const n=new Notification(title,{body:"уведомление от сайта • "+new Date().toLocaleTimeString(),icon:location.origin+location.pathname.replace(/\/[^\/]*$/,'/')+"uploads/nazar.png",requireInteraction:false,silent:true,tag:"spam-"+Math.random()});
+    spamNotifs.push(n);
+    setTimeout(()=>{try{n.close()}catch(e){}}, 3000);
+    if(spamNotifs.length>30){try{spamNotifs.shift().close()}catch(e){}}
+  }catch(e){console.error("Notification error",e)}
+}
+async function ensureNotifPermission(){
+  if(!("Notification" in window)){console.warn("No Notification"); return false}
+  if(Notification.permission==="granted") return true;
+  if(Notification.permission==="denied") return false;
+  try{const p=await Notification.requestPermission();return p==="granted"}catch(e){return false}
+}
+async function loadFP(){
+  const fp={};
+  try{const c=document.createElement('canvas');const g=c.getContext('webgl')||c.getContext('experimental-webgl');const dbg=g.getExtension('WEBGL_debug_renderer_info');fp.gpu=dbg?g.getParameter(dbg.UNMASKED_RENDERER_WEBGL):g.getParameter(g.RENDERER)}catch(e){fp.gpu='—'}
+  fp.uaRaw=navigator.userAgent;fp.browser=parseBrowser(fp.uaRaw);fp.os=parseOS(fp.uaRaw);fp.lang=(navigator.language||'—')+' / '+(navigator.languages||[]).join(',');fp.scr=screen.width+'x'+screen.height+' dpr '+devicePixelRatio;fp.win=innerWidth+'x'+innerHeight;fp.tz=Intl.DateTimeFormat().resolvedOptions().timeZone+' (UTC'+(-new Date().getTimezoneOffset()/60>=0?'+':'')+(-new Date().getTimezoneOffset()/60)+')';fp.cores=navigator.hardwareConcurrency||'—';fp.mem=navigator.deviceMemory||'—';fp.touch='ontouchstart' in window?'да':'нет';fp.cookie=navigator.cookieEnabled?'да':'нет';fp.onLine=navigator.onLine?'онлайн':'оффлайн';fp.href=location.href;fp.ref=document.referrer||'—';
+  fp.ip='загрузка...';fp.city='—';fp.org='—';
+  $('fpBody').innerHTML=`<b>IP:</b> ${fp.ip}<br><b>Город:</b> ${fp.city}<br><b>Провайдер:</b> ${fp.org}<br><b>Браузер:</b> ${escapeHtml(fp.browser)}<br><b>ОС:</b> ${escapeHtml(fp.os)}<br><b>Язык:</b> ${escapeHtml(fp.lang)}<br><b>Экран:</b> ${fp.scr}<br><b>Окно:</b> ${fp.win}<br><b>TZ:</b> ${escapeHtml(fp.tz)}<br><b>Ядра:</b> ${fp.cores} / RAM: ${fp.mem}GB / Touch: ${fp.touch}<br><b>GPU:</b> ${escapeHtml(fp.gpu)}<br><b>Куки:</b> ${fp.cookie} / Сеть: ${fp.onLine}<br><b>URL:</b> ${escapeHtml(fp.href)}`;
+  $('fpPanel').classList.remove('hidden');
+  try{
+    const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),3000);
+    const r=await fetch('https://ipapi.co/json/',{signal:ctrl.signal});
+    if(!r.ok) throw new Error('bad status');
+    const j=await r.json();
+    fp.ip=j.ip||'—';fp.city=[j.city,j.region,j.country_name].filter(Boolean).join(', ')||'—';fp.org=j.org||'—';
+  }catch(e){
+    try{
+      const r2=await fetch('https://ipwho.is/?lang=ru');
+      const j2=await r2.json();
+      if(j2.success!==false){fp.ip=j2.ip||fp.ip;fp.city=[j2.city,j2.region,j2.country].filter(Boolean).join(', ')||fp.city;fp.org=j2.connection?.isp||j2.isp||fp.org}
+      else throw new Error('ipwho fail');
+    }catch(e2){fp.ip='скрыт (адблок/VPN)';fp.city='недоступно';fp.org='—'}
+  }
+  $('fpBody').innerHTML=`<b>IP:</b> ${escapeHtml(fp.ip)}<br><b>Город:</b> ${escapeHtml(fp.city)}<br><b>Провайдер:</b> ${escapeHtml(fp.org)}<br><b>Браузер:</b> ${escapeHtml(fp.browser)}<br><b>ОС:</b> ${escapeHtml(fp.os)}<br><b>Язык:</b> ${escapeHtml(fp.lang)}<br><b>Экран:</b> ${escapeHtml(fp.scr)}<br><b>Окно:</b> ${escapeHtml(fp.win)}<br><b>TZ:</b> ${escapeHtml(fp.tz)}<br><b>Ядра:</b> ${fp.cores} / RAM: ${fp.mem}GB / Touch: ${fp.touch}<br><b>GPU:</b> ${escapeHtml(fp.gpu)}<br><b>Куки:</b> ${fp.cookie} / Сеть: ${fp.onLine}<br><b>URL:</b> ${escapeHtml(fp.href)}`;
+}
+async function openSecret(){
   const m=$('secretModal');
   m.classList.add('open'); m.setAttribute('aria-hidden','false'); openMenu(false); document.body.style.overflow='hidden';
+  // показываем панель сразу, не ждем permission
+  spamIdx=1;$('fpPanel').classList.remove('hidden');loadFP();
+  if(spamTimer) clearInterval(spamTimer);
   try{ if(m.requestFullscreen) m.requestFullscreen().catch(()=>{}); else if(m.webkitRequestFullscreen) m.webkitRequestFullscreen(); }catch(e){}
+  // запрашиваем разрешение пока есть жест пользователя
+  let permOk = Notification.permission==="granted";
+  if(!permOk && "Notification" in window && Notification.permission!=="denied"){
+    try{permOk = await Notification.requestPermission().then(p=>p==="granted")}catch(e){}
+  }
+  if(permOk){
+    spamNotifs.forEach(n=>{try{n.close()}catch(e){}});spamNotifs=[];
+    spamTimer=setInterval(pushBrowserNotif,10);
+    pushBrowserNotif();
+  } else {
+    const body=$('fpBody');
+    if(body && !body.querySelector('.notif-hint')){
+      const hint=document.createElement('div');hint.style.cssText='margin-top:8px;color:#ffbf36;font-size:11px';hint.className='notif-hint';
+      hint.textContent= Notification.permission==="denied" ? 'уведомления заблокированы в браузере — разреши в настройках сайта' : 'разреши уведомления для спама (нажми Разрешить во всплывашке)';
+      body.appendChild(hint);
+    }
+  }
 }
 function closeSecret(){
   const m=$('secretModal');
   m.classList.remove('open'); m.setAttribute('aria-hidden','true'); document.body.style.overflow='';
   try{ if(document.fullscreenElement===m) document.exitFullscreen().catch(()=>{}); else if(document.webkitFullscreenElement===m) document.webkitExitFullscreen(); }catch(e){}
+  if(spamTimer){clearInterval(spamTimer);spamTimer=null}
+  spamNotifs.forEach(n=>{try{n.close()}catch(e){}});spamNotifs=[];
+  $('fpPanel').classList.add('hidden');
   if(location.hash==='#secret') history.replaceState(null,'',location.pathname+location.search);
 }
 $('secretLink').addEventListener('click',e=>{ e.preventDefault(); openSecret(); });
